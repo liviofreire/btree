@@ -13,7 +13,7 @@ public class DataSerializer<V> {
 	static final int FILE_SIZE_OFFSET = 0;
 	private long fileSize;
 	
-	public DataSerializer(File file, DataType<V> dt) throws IOException {
+	DataSerializer(File file, DataType<V> dt) throws IOException {
 		this.file = file;
 		this.valueDT = dt;
 		fileSize = getFileSize();
@@ -27,22 +27,28 @@ public class DataSerializer<V> {
 		return value;
 	}
 	
-	void write(long offset, V val) throws Exception {
+	private void write(long offset, V val, boolean append) throws Exception {
 		RandomAccessFile fileStore = new RandomAccessFile(file, "rw"); 
 		fileStore.seek(offset);
 		valueDT.write(val, fileStore);
 		
-		fileSize += valueDT.size();
-		fileStore.seek(FILE_SIZE_OFFSET);
-		fileStore.writeLong(fileSize);
+		if (append) {
+			fileSize += valueDT.size();
+			fileStore.seek(FILE_SIZE_OFFSET);
+			fileStore.writeLong(fileSize);
+		}
 		
 		fileStore.close();
 	}
 	
-	public long append(V val) throws Exception {
-		long lastPosition = fileSize; 
-		write(fileSize, val);
-		return lastPosition;
+	void write(long offset, V val) throws Exception {
+		write(offset, val, false);
+	}
+	
+	long append(V val) throws Exception { 
+		long lastSize = fileSize;
+		write(fileSize, val, true);
+		return lastSize;
 	}
 	
 	private long getFileSize() throws IOException {
@@ -58,7 +64,7 @@ public class DataSerializer<V> {
 			fileStore.seek(FILE_SIZE_OFFSET);
 			fileStore.writeLong(8L);
 			fileStore.close();
-			return 0L;
+			return 8L;
 		}
 	}
 }

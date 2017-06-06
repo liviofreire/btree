@@ -33,13 +33,14 @@ public class Page<K extends Comparable<K>> {
 	
 	public Page<K> next(K key) throws Exception {
 		K next = st.floor(key);
-		return serializer.readPage(st.get(next));
+		return serializer.read(st.get(next));
 	}
 
 	
 	public Page<K> split() throws Exception {
-		BinarySearchST<K, Long> newST = this.st.split();		
-		return serializer.createPage(newST, bottom);
+		BinarySearchST<K, Long> newST = this.st.split();	
+		this.close();
+		return serializer.append(newST, bottom);
 	}
 	
 	public Long getDataOffset(K key) {
@@ -60,7 +61,7 @@ public class Page<K extends Comparable<K>> {
 	}
 
 	public void close() throws Exception {
-		serializer.writePage(offset, this);
+		serializer.write(offset, this);
 	}
 	
 	public BinarySearchST<K, Long> asSymbolTable() {

@@ -21,7 +21,7 @@ public class PageSerializer<K extends Comparable<K>> {
 	private long fileSize;
 	private int nKeys;
 	
-	public PageSerializer(File file, DataType<K> dt, int m) throws IOException {
+	PageSerializer(File file, DataType<K> dt, int m) throws IOException {
 		this.file = file;
 		this.keyDT = dt;
 		this.adressDT = new LongDT();
@@ -47,7 +47,7 @@ public class PageSerializer<K extends Comparable<K>> {
 		return 1 + 4 + m * (keyDT.size() + adressDT.size());  
 	}
 	
-	public long writePage(long offset, Page<K> page) throws Exception {
+	private void write(long offset, Page<K> page, boolean append) throws Exception {
 		RandomAccessFile fileStore = new RandomAccessFile(file, "rw");
 		fileStore.seek(offset);
 		fileStore.writeBoolean(page.isExternal());
@@ -55,30 +55,29 @@ public class PageSerializer<K extends Comparable<K>> {
 		fileStore.writeInt(st.size());
 		keyDT.write(fileStore, st.keys(), m);
 		adressDT.write(fileStore, st.values(), m);
-		long pointer = fileStore.getFilePointer();
 		
-		fileSize += pageSize();
-		fileStore.seek(FILE_SIZE_OFFSET);
-		fileStore.writeLong(fileSize);
+		if (append) {
+			fileSize += pageSize();
+			fileStore.seek(FILE_SIZE_OFFSET);
+			fileStore.writeLong(fileSize);
+			fileStore.close();
+		}
 		
 		fileStore.close();
-		return pointer;
 	}
 	
-	public long appendPage(Page<K> page) throws Exception {
-		long lastPosition = fileSize;
-		writePage(lastPosition, page);
-		return lastPosition;
+	void write(long offset, Page<K> page) throws Exception {
+		write(offset, page, false);
 	}
 	
-	public Page<K> createPage(BinarySearchST<K, Long> st, boolean bottom) throws Exception {
-		long lastPosition = fileSize;
-		Page<K> page = new Page<>(st, bottom, lastPosition, this);
+	Page<K> append(BinarySearchST<K, Long> st, boolean bottom) throws Exception {
+		Page<K> page = new Page<>(st, bottom, fileSize, this);
+		write(fileSize, page, true);
 		return page;
 	}
 	
 	@SuppressWarnings("unchecked")
-	public Page<K> readPage(long offset) throws Exception {
+	Page<K> read(long offset) throws Exception {
 		RandomAccessFile fileStore = new RandomAccessFile(file, "r");
 		fileStore.seek(offset);
 		
@@ -94,25 +93,24 @@ public class PageSerializer<K extends Comparable<K>> {
 		return new Page<>(st, botton, offset, this);
 	}
 	
-	public int getPageSize() {
+	int getPageSize() {
 		return m;
 	}
 
-	public Page<K> readRoot() throws Exception {
+	Page<K> readRoot() throws Exception {
 		Page<K> root = null;
 		RandomAccessFile fileStore = new RandomAccessFile(file, "rw");
-		if (fileSize > ROOT_OFFSET) root = readPage(ROOT_OFFSET);
+		if (fileSize > ROOT_OFFSET) root = read(ROOT_OFFSET);
 		else {
 			BinarySearchST<K, Long> st = new BinarySearchST<>(m);
-			root = new Page<>(st, true, ROOT_OFFSET, this);
-			root.insert(keyDT.getSentinel(), -1L);
-			appendPage(root);
+			st.put(keyDT.getSentinel(), -1L);
+			root = append(st, true);
 		}
 		fileStore.close();
 		return root;
 	}
 	
-	public void keyInserted() throws IOException {
+	void keyInserted() throws IOException {
 		nKeys++;
 		RandomAccessFile fileStore = new RandomAccessFile(file, "rw");
 		fileStore.seek(N_KEYS_OFFSET);
